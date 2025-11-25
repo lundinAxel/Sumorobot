@@ -60,11 +60,12 @@ dkms.conf
 .vscode/launch.json
 .vscode/ipch
 
+
 build/
 sdkconfig.*
 CMakeLists.txt
 .pio
-.vscode
+.vscode/
 *.exe
 *.o
 *.bin
