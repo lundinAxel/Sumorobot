@@ -1,28 +1,55 @@
 #include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "driver/gpio.h"
-#include "sdkconfig.h"
+#include <stdbool.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <ultrasonic.h>
+#include <esp_err.h>
 
-#define BLINK_GPIO 20
+#define MAX_DISTANCE_CM 500 // 5m max
 
-void app_main(void)
+#define TRIGGER_GPIO 20
+#define ECHO_GPIO 21
+
+
+void ultrasonic_test(void *pvParameters)
 {
-    // Configure the GPIO pin
-    gpio_reset_pin(BLINK_GPIO);
-    gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
+    ultrasonic_sensor_t sensor = {
+        .trigger_pin = TRIGGER_GPIO,
+        .echo_pin = ECHO_GPIO
+    };
 
-    // Blink loop
-    while (1)
+    ultrasonic_init(&sensor);
+
+    while (true)
     {
-        // Turn LED ON
-        printf("LED ON\n");
-        gpio_set_level(BLINK_GPIO, 1);
-        vTaskDelay(1000 / portTICK_PERIOD_MS); // Delay 1 second
+        float distance;
+        esp_err_t res = ultrasonic_measure(&sensor, MAX_DISTANCE_CM, &distance);
+        if (res != ESP_OK)
+        {
+            printf("Error %d: ", res);
+            switch (res)
+            {
+                case ESP_ERR_ULTRASONIC_PING:
+                    printf("Cannot ping (device is in invalid state)\n");
+                    break;
+                case ESP_ERR_ULTRASONIC_PING_TIMEOUT:
+                    printf("Ping timeout (no device found)\n");
+                    break;
+                case ESP_ERR_ULTRASONIC_ECHO_TIMEOUT:
+                    printf("Echo timeout (i.e. distance too big)\n");
+                    break;
+                default:
+                    printf("%s\n", esp_err_to_name(res));
+            }
+        }
+        else
+            printf("Distance: %0.04f cm\n", distance*100);
 
-        // Turn LED OFF
-        printf("LED OFF\n");
-        gpio_set_level(BLINK_GPIO, 0);
-        vTaskDelay(1000 / portTICK_PERIOD_MS); // Delay 1 second
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
+}
+
+void app_main()
+{
+    xTaskCreate(ultrasonic_test, "ultrasonic_test", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 }
