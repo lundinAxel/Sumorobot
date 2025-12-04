@@ -170,15 +170,12 @@ void setup()
 
     ultrasonic_init(&sensor);
     gpio_config(&io_conf);
-<<<<<<< HEAD
 
-    mcpwm_init(MCPWM_UNIT_0, MCPWM_TIMER_0, &pwm_config)
-=======
+    mcpwm_init(MCPWM_UNIT_0, MCPWM_TIMER_0, &pwm_config);
     gpio_install_isr_service(0);
     gpio_isr_handler_add(IR_SENSOR_BUTTON, button_isr_handler, NULL);
     
     
->>>>>>> c3ef1ed1128d03ef7fd3ae7c37160d63fd6a74bf
 }
 
 void app_main()
