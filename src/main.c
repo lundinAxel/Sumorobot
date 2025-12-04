@@ -6,6 +6,8 @@
 #include <esp_err.h>
 #include "driver/gpio.h"
 #include "sdkconfig.h"
+#include "esp_intr_alloc.h"
+#include "esp_log.h"
 
 #define MAX_DISTANCE_CM 0.8 // 4m max
 
@@ -32,17 +34,26 @@ ultrasonic_sensor_t sensor = {
     .echo_pin = ECHO_GPIO};
 
 gpio_config_t io_conf = {
-    .pin_bit_mask = (1ULL << IR_SENSOR_BUTTON), // Select GPIO 4
-    .mode = GPIO_MODE_INPUT,                    // Set as input
-    .pull_up_en = GPIO_PULLUP_ENABLE,           // Enable internal pull-up
-    .pull_down_en = GPIO_PULLDOWN_DISABLE,      // Disable pull-down
-    .intr_type = GPIO_INTR_DISABLE              // Disable interrupts
+        .intr_type = GPIO_INTR_NEGEDGE,     // interrupt på fallande flank
+        .mode = GPIO_MODE_INPUT,
+        .pin_bit_mask = (1ULL << IR_SENSOR_BUTTON),
+        .pull_down_en = 0,
+        .pull_up_en = 1              // Disable interrupts
 };
 
 bool idle_flag = 0;
+volatile bool button_pressed = false;
+
+void IRAM_ATTR button_isr_handler(void* arg)
+{
+    // Sätt bara en flagga (snabbt!)
+    button_pressed = true;
+
+}
 
 void ultrasonic_test(void *pvParameters)
 {
+    //esp_intr_alloc_flags_t flags = ESP_INTR_FLAG_LEVEL1;
 
     gpio_reset_pin(YELLOW_LED);
     gpio_set_direction(YELLOW_LED, GPIO_MODE_OUTPUT);
@@ -95,8 +106,9 @@ float read_ultrasonic()
     float distance;
     ultrasonic_measure(&sensor, MAX_DISTANCE_CM, &distance);
 
-    vTaskDelay(pdMS_TO_TICKS(250));
+    
     printf("Distance: %0.04f cm\n", distance * 100);
+    vTaskDelay(pdMS_TO_TICKS(250));
     return distance * 100;
 }
 
@@ -115,7 +127,7 @@ circle and spin around (idle)
 void target_detected()
 {
     // Drive forward;
-    while (read_ultrasonic() < 36)
+    while (read_ultrasonic() < 36 && !button_pressed)
     {
         gpio_set_level(YELLOW_LED, 1);
     }
@@ -129,6 +141,9 @@ void target_detected()
 /*If line is detected back up to middle and go to idle as a interrupt*/
 void line_detected()
 {
+    // Back up to middle of circle
+    gpio_set_level(YELLOW_LED, 0);
+    return;
 }
 
 void setup()
@@ -153,16 +168,23 @@ void setup()
 
     ultrasonic_init(&sensor);
     gpio_config(&io_conf);
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(IR_SENSOR_BUTTON, button_isr_handler, NULL);
+    
+    
 }
 
 void app_main()
 {
-    /*
+
     setup();
 
-    while (true)
-    {
-        if (!idle_flag)
+
+    while (true){
+        
+
+
+         if (!idle_flag)
         {
             idle();
         }
@@ -171,23 +193,17 @@ void app_main()
         {
             target_detected();
         }
-    }
-    */
+    
+        if (button_pressed) 
+        {
+            line_detected();
+            button_pressed = false;  // nollställ flaggan
 
-    while (1)
-    {
-        // Read GPIO level (current state)
-        int level = gpio_get_level(IR_SENSOR_BUTTON);
-        if (level == 0)
-        {
-            printf("Button Pressed!\n");
+            printf("Line detected!\n");
         }
-        else
-        {
-            printf("Button Released...\n");
-        }
-        vTaskDelay(200 / portTICK_PERIOD_MS); // Delay 200ms
-    }
+}
+    
+
 
     // xTaskCreate(ultrasonic_test, "ultrasonic_test", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 }
