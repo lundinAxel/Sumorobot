@@ -9,6 +9,10 @@
 #include "esp_intr_alloc.h"
 #include "esp_log.h"
 
+#include "esp_attr.h"
+#include "driver/mcpwm.h"
+#include "soc/mcpwm_periph.h"
+
 #define MAX_DISTANCE_CM 0.8 // 4m max
 
 // Ultrasonic sensor pins
@@ -17,10 +21,8 @@
 #define YELLOW_LED 2
 
 // Motor driver outputs
-#define MOTOR_LEFT_A 35
-#define MOTOR_LEFT_B 36
-#define MOTOR_RIGHT_A 37
-#define MOTOR_RIGHT_B 38
+#define GPIO_PWM0A_OUT 35
+#define GPIO_PWM0B_OUT 36
 
 #define IR_SENSOR_BUTTON 39
 
@@ -40,6 +42,13 @@ gpio_config_t io_conf = {
         .pull_down_en = 0,
         .pull_up_en = 1              // Disable interrupts
 };
+
+mcpwm_config_t pwm_config = {
+    .frequency = 1000, // frequency = 500Hz,
+    .cmpr_a = 0,       // duty cycle of PWMxA = 0
+    .cmpr_b = 0,       // duty cycle of PWMxb = 0
+    .counter_mode = MCPWM_UP_COUNTER,
+    .duty_mode = MCPWM_DUTY_MODE_0};
 
 bool idle_flag = 0;
 volatile bool button_pressed = false;
@@ -150,24 +159,19 @@ void setup()
 {
 
     // Motor drivers setup
-    gpio_reset_pin(MOTOR_LEFT_A);
-    gpio_set_direction(MOTOR_LEFT_A, GPIO_MODE_OUTPUT);
-
-    gpio_reset_pin(MOTOR_LEFT_B);
-    gpio_set_direction(MOTOR_LEFT_B, GPIO_MODE_OUTPUT);
-
-    gpio_reset_pin(MOTOR_RIGHT_A);
-    gpio_set_direction(MOTOR_RIGHT_A, GPIO_MODE_OUTPUT);
-
-    gpio_reset_pin(MOTOR_RIGHT_B);
-    gpio_set_direction(MOTOR_RIGHT_B, GPIO_MODE_OUTPUT);
+    printf("Initializing mcpwm gpio\n");
+    mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM0A, GPIO_PWM0A_OUT);
+    mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM0B, GPIO_PWM0B_OUT);
 
     // Ultrasonic sensor setup
+    printf("Initializing ultrasonic gpio\n");
     gpio_reset_pin(YELLOW_LED);
     gpio_set_direction(YELLOW_LED, GPIO_MODE_OUTPUT);
 
     ultrasonic_init(&sensor);
     gpio_config(&io_conf);
+
+    mcpwm_init(MCPWM_UNIT_0, MCPWM_TIMER_0, &pwm_config);
     gpio_install_isr_service(0);
     gpio_isr_handler_add(IR_SENSOR_BUTTON, button_isr_handler, NULL);
     
@@ -206,4 +210,25 @@ void app_main()
 
 
     // xTaskCreate(ultrasonic_test, "ultrasonic_test", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+}
+
+void motor_forward(mcwpm_unit_t mcpwm_num, mcpwm_timer_t timer_num, float duty_cycle)
+{
+    mcpwm_set_signal_low(mcpwm_num, timer_num, MCPWM_OPR_B);
+    mcpwm_set_duty(mcpwm_num, timer_num, MCPWM_OPR_A, duty_cycle);
+    mcpwm_set_duty_type(mcpwm_num, timer_num, MCPWM_OPR_A, MCPWM_DUTY_MODE_0);
+}
+
+void motor_stop(mcpwm_unit_t mcpwm_num, mcpwm_timer_t timer_num)
+{
+    mcpwm_set_signal_low(mcpwm_num, timer_num, MCPWM_OPR_A);
+    mcpwm_set_signal_low(mcpwm_num, timer_num, MCPWM_OPR_B);
+}
+
+void motor_backwards(mcpwm_unit_t mcwpm_num, mcpwm_timer_t timer_num, float duty_cycle)
+{
+}
+
+void motor_turn_right(mcpwm_unit_t mcwpm_num, mcpwm_timer_t timer_num, float duty_cycle)
+{
 }
